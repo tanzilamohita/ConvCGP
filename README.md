@@ -8,5 +8,5 @@ A deep learning-based method called Compression-based Genomic Prediction using C
 
 Availability of Datasets: You can access the dataset from [here](http://www.ricediversity.org/data/index.cfm).
 
-Availability of DeepCGP (Previous work for Data Compression:  [here](https://github.com/tanzilamohita/DeepCGP).
+Availability of DeepCGP (Previous work for Data Compression):  [here](https://github.com/tanzilamohita/DeepCGP).
 
