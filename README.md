@@ -10,5 +10,4 @@ Availability of Rice Datasets: You can access the dataset from [here](http://www
 
 Availability of Maize Datasets: You can access the dataset from [here](https://iagr.genomics.cn/CropGS/#/).
 
-Availability of DeepCGP (Previous work for Data Compression):  [here](https://github.com/tanzilamohita/DeepCGP).
 
