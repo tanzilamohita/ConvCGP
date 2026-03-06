@@ -4,10 +4,7 @@
 # ===============================
 
 import os
-import glob
 import numpy as np
-import time
-
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Dense
@@ -21,24 +18,6 @@ if gpus:
     print(f"GPU is available: {gpus}")
 else:
     print("GPU is NOT available. Running on CPU.")
-
-
-# ============ Configuration ============
-C = 3
-Data = "Maize"
-META_DIR = f"../ModelMetaData_{Data}"
-NPY_FOLDER = f"{META_DIR}/{Data}_Compressed_Separated/C2"
-COMPRESSED_OUTPUT = f"{META_DIR}/{Data}_Compressed_Separated/C{C}"
-os.makedirs(COMPRESSED_OUTPUT, exist_ok=True)
-
-# Best config (already tuned for C3)
-best_config = {
-    "InputDim": 112,
-    "Compress": [84, 56, 14],
-    "BatchSize": 64,
-    "LearningRate": 0.001,
-    "Epochs": 200,
-}
 
 
 # ============ Autoencoder Model ============
@@ -97,19 +76,58 @@ def compress_single_chromosome(path, best_config):
 
     # Combine all encoded chunks and save
     compressed_array = np.hstack(encoded_chunks)
-    output_path = os.path.join(COMPRESSED_OUTPUT, f"{chr_name}_C{C}.npy")
-    np.save(output_path, compressed_array)
 
-    print(f"Saved compressed data: {output_path}")
-
-    return os.path.basename(path)
+    return compressed_array
 
 
-# ============ Run Script ============
-if __name__ == "__main__":
-    total_start_time = time.time()
+def compress_data(X, best_config, seed=42, verbose=True):
 
-    file_paths = sorted(glob.glob(os.path.join(NPY_FOLDER, f'GSTP004_chr*_C2.npy')))
-    for path in file_paths:
-        chr_name = os.path.basename(path).replace(f'_C2.npy', '')
-        compress_single_chromosome(path, best_config)
+    input_dim  = best_config["InputDim"]
+    compress   = best_config["Compress"]
+    batch_size = best_config["BatchSize"]
+    lr         = best_config["LearningRate"]
+    epochs     = best_config["Epochs"]
+
+    X = X.astype(np.float32)
+
+    n_chunks = X.shape[1] // input_dim
+    if n_chunks == 0:
+        raise ValueError(f"X has {X.shape[1]} features < InputDim={input_dim}")
+
+    usable = n_chunks * input_dim
+    if usable != X.shape[1] and verbose:
+        print(f"Dropping last {X.shape[1] - usable} feature(s) to fit InputDim={input_dim}.")
+
+    split_chunks = np.hsplit(X[:, :usable], n_chunks)
+
+    encoded_chunks = []
+    for i, chunk in enumerate(split_chunks):
+        if verbose:
+            print(f"→ Chunk {i+1}/{len(split_chunks)} | chunk shape={chunk.shape}")
+
+        x_train, x_mid = train_test_split(chunk, test_size=0.4, random_state=seed)
+        x_test, x_valid = train_test_split(x_mid, test_size=0.5, random_state=seed)
+
+        autoencoder, encoder = build_autoencoder(input_dim, compress)
+        autoencoder.compile(optimizer=Adam(learning_rate=lr), loss="mse")
+        early_stop = EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)
+
+        autoencoder.fit(
+            x_train, x_train,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_data=(x_valid, x_valid),
+            callbacks=[early_stop],
+            verbose=0
+        )
+
+        encoded = encoder.predict(chunk, batch_size=batch_size, verbose=0)
+        encoded_chunks.append(encoded)
+
+    compressed_array = np.hstack(encoded_chunks)
+    if verbose:
+        print("Final compressed shape:", compressed_array.shape)
+
+    return compressed_array
+
+
